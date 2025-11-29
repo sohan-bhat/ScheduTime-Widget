@@ -33,17 +33,51 @@ function parseScheduleFromUrl() {
     }
 }
 
-function isWeekend() {
-    const day = new Date().getDay();
-    return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+function parseCustomDateRanges(days) {
+    // Format: c20241103-20241107_20250203-20250203 (multiple ranges separated by _)
+    if (!days.startsWith('c')) return null;
+
+    const parseDate = (str) => {
+        const y = parseInt(str.slice(0, 4));
+        const m = parseInt(str.slice(4, 6)) - 1;
+        const d = parseInt(str.slice(6, 8));
+        return new Date(y, m, d);
+    };
+
+    const rangeStrs = days.slice(1).split('_');
+    const ranges = [];
+
+    for (const rangeStr of rangeStrs) {
+        const parts = rangeStr.split('-');
+        if (parts.length === 2) {
+            ranges.push({
+                start: parseDate(parts[0]),
+                end: parseDate(parts[1])
+            });
+        }
+    }
+
+    return ranges.length > 0 ? ranges : null;
 }
 
 function filterScheduleForToday(fullSchedule) {
-    const weekend = isWeekend();
+    const now = new Date();
+    const todayDay = now.getDay();
+    const isWeekend = todayDay === 0 || todayDay === 6;
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
     return fullSchedule.filter(task => {
         if (task.days === 'both') return true;
-        if (task.days === 'weekends' && weekend) return true;
-        if (task.days === 'weekdays' && !weekend) return true;
+        if (task.days === 'weekends' && isWeekend) return true;
+        if (task.days === 'weekdays' && !isWeekend) return true;
+
+        if (task.days && task.days.startsWith('c')) {
+            const ranges = parseCustomDateRanges(task.days);
+            if (ranges) {
+                return ranges.some(range => today >= range.start && today <= range.end);
+            }
+        }
+
         return false;
     });
 }
