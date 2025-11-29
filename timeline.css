@@ -1,0 +1,322 @@
+:root {
+    --bg-primary: #0a0a0a;
+    --bg-card: #141414;
+    --bg-tertiary: #1c1c1c;
+    --border: #262626;
+    --text-primary: #fafafa;
+    --text-secondary: #a3a3a3;
+    --text-muted: #525252;
+    --accent: #ef4444;
+    --radius: 8px;
+    --radius-lg: 16px;
+    --gap: 4px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow-x: hidden;
+}
+
+.widget {
+    width: 100%;
+    max-width: 720px;
+    overflow: hidden;
+    animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.task-name {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.task-name.free {
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.time-left {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4497ef;
+    background: transparent;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1.5px solid #4497ef;
+}
+
+.current-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.seconds-track {
+    position: relative;
+    height: 24px;
+    margin-bottom: 8px;
+    clip-path: inset(-10px 0px -10px 0px);
+}
+
+.seconds-ticker {
+    position: absolute;
+    display: flex;
+    align-items: flex-end;
+    height: 100%;
+}
+
+.second-mark {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 10px;
+    flex-shrink: 0;
+}
+
+.second-mark .tick {
+    width: 1px;
+    height: 6px;
+    background: var(--text-muted);
+    opacity: 0.55;
+}
+
+.second-mark.major .tick {
+    height: 10px;
+    width: 1px;
+    background: var(--text-secondary);
+    opacity: 0.8;
+}
+
+.second-mark .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+    font-weight: 500;
+}
+
+.timeline-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 10px;
+    padding-top: 24px;
+    padding-bottom: 20px;
+    position: relative;
+}
+
+.timeline-viewport {
+    position: relative;
+    height: 70px;
+    overflow: hidden;
+}
+
+.timeline {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 60px;
+}
+
+.block {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 60px;
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+        filter 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: default;
+}
+
+.block.active {
+    height: 60px;
+    z-index: 5;
+    box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.2),
+        0 4px 20px -4px rgba(0, 0, 0, 0.5);
+    animation: soft-pulse 3s ease-in-out infinite;
+}
+
+.block.inactive {
+    height: 28px;
+    opacity: 0.6;
+}
+
+.block.past {
+    filter: saturate(0.2) brightness(0.45);
+    opacity: 0.4;
+}
+
+.block.gap-block {
+    background: var(--bg-tertiary);
+}
+
+.block-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 1);
+    padding: 4px 8px;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    line-height: 1.2;
+    max-height: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    opacity: 1;
+    transition: all 0.3s ease;
+}
+
+.block.active .block-label {
+    font-size: 12px;
+    font-weight: 600;
+    -webkit-line-clamp: 2;
+}
+
+.block.inactive .block-label {
+    font-size: 9px;
+    opacity: 1;
+    -webkit-line-clamp: 2;
+}
+
+.block.past .block-label {
+    opacity: 0.7;
+}
+
+.fade-left,
+.fade-right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 30px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.fade-left {
+    left: 0;
+    background: linear-gradient(to right, var(--bg-card) 0%, transparent 100%);
+}
+
+.fade-right {
+    right: 0;
+    background: linear-gradient(to left, var(--bg-card) 0%, transparent 100%);
+}
+
+.needle {
+    position: absolute;
+    left: 50%;
+    top: 52px;
+    bottom: 43px;
+    transform: translateX(-50%);
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+}
+
+.needle-line {
+    width: 2px;
+    flex-grow: 1;
+    background: var(--accent);
+    border-radius: 1px;
+    box-shadow: 0 0 8px 1px rgba(239, 68, 68, 0.4);
+}
+
+.needle-triangle {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: 8px solid var(--accent);
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.5));
+}
+
+.time-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 14px;
+    padding: 0 4px;
+}
+
+.time-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+    min-width: 70px;
+}
+
+.time-label:first-child {
+    text-align: left;
+}
+
+.time-label:nth-child(2) {
+    text-align: center;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.time-label:last-child {
+    text-align: right;
+}
+
+@keyframes soft-pulse {
+    0%, 100% {
+        box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.2), 0 4px 20px -4px rgba(0, 0, 0, 0.5);
+    }
+    50% {
+        box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.28), 0 4px 24px -4px rgba(0, 0, 0, 0.6);
+    }
+}
+
+@keyframes fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

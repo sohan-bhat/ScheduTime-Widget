@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Timeline</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="timeline.css">
+</head>
+
+<body>
+    <div class="widget">
+        <div class="header">
+            <div class="header-left">
+                <span class="task-name" id="taskName">—</span>
+                <span class="time-left" id="timeLeft"></span>
+            </div>
+            <span class="current-date" id="currentDate"></span>
+        </div>
+
+        <div class="timeline-box">
+            <div class="seconds-track">
+                <div class="seconds-ticker" id="secondsTicker"></div>
+            </div>
+            <div class="timeline-viewport">
+                <div class="timeline" id="timeline"></div>
+                <div class="fade-left"></div>
+                <div class="fade-right"></div>
+            </div>
+            <div class="needle">
+                <div class="needle-line"></div>
+                <div class="needle-triangle"></div>
+            </div>
+            <div class="time-labels" id="timeLabels"></div>
+        </div>
+    </div>
+
+    <script src="timeline.js"></script>
+</body>
+
+</html>

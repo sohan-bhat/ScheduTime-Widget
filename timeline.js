@@ -1,0 +1,331 @@
+const schedule = [
+    { start: "08:00", end: "12:00", task: "School", color: "#6366f1" },
+    { start: "12:00", end: "13:00", task: "Lunch", color: "#22c55e" },
+    { start: "13:00", end: "15:00", task: "Study", color: "#3b82f6" },
+    { start: "15:30", end: "17:00", task: "Free time", color: "#f59e0b" },
+    { start: "18:00", end: "19:00", task: "Dinner", color: "#a855f7" },
+];
+
+const HOURS_VISIBLE = 3;
+
+let lastSecond = -1;
+let tickerPosition = 0;
+let initialized = false;
+let timelineBuilt = false;
+
+function timeToMinutes(timeStr) {
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+}
+
+function formatTime12(date) {
+    return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+function formatDate(date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const day = date.getDate();
+    const year = date.getFullYear();
+    return `${month}. ${day}, ${year}`;
+}
+
+function formatTimeFromMinutes(minutes) {
+    let adjustedMinutes = minutes;
+    if (adjustedMinutes < 0) adjustedMinutes += 24 * 60;
+    if (adjustedMinutes >= 24 * 60) adjustedMinutes -= 24 * 60;
+
+    const h = Math.floor(adjustedMinutes / 60) % 24;
+    const m = Math.floor(adjustedMinutes % 60);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return m === 0 ? `${hour} ${period}` : `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+}
+
+function formatDuration(minutes) {
+    if (minutes >= 60) {
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    }
+    return `${minutes}m`;
+}
+
+function renderSecondsTicker() {
+    const now = new Date();
+    const currentSecond = now.getSeconds();
+    const currentMs = now.getMilliseconds();
+
+    const ticker = document.getElementById('secondsTicker');
+    const track = document.querySelector('.seconds-track');
+    const trackWidth = track.offsetWidth;
+
+    const markWidth = 10;
+    const totalMarks = 180;
+    const cycleWidth = 60 * markWidth;
+
+    if (ticker.children.length === 0) {
+        for (let i = 0; i < totalMarks; i++) {
+            const sec = i % 60;
+            const mark = document.createElement('div');
+            mark.className = 'second-mark' + (sec % 5 === 0 ? ' major' : '');
+
+            if (sec % 5 === 0) {
+                const label = document.createElement('span');
+                label.className = 'label';
+                label.textContent = sec;
+                mark.appendChild(label);
+            }
+
+            const tick = document.createElement('div');
+            tick.className = 'tick';
+            mark.appendChild(tick);
+
+            ticker.appendChild(mark);
+        }
+    }
+
+    const centerOffset = trackWidth / 2;
+
+    if (!initialized) {
+        tickerPosition = cycleWidth + (currentSecond * markWidth) + ((currentMs / 1000) * markWidth);
+        initialized = true;
+        lastSecond = currentSecond;
+    } else {
+        const exactProgress = (currentMs / 1000) * markWidth;
+        const basePosition = cycleWidth + (currentSecond * markWidth);
+        tickerPosition = basePosition + exactProgress;
+
+        if (tickerPosition >= cycleWidth * 2) {
+            tickerPosition -= cycleWidth;
+        }
+    }
+
+    ticker.style.left = -(tickerPosition - centerOffset) + 'px';
+    lastSecond = currentSecond;
+}
+
+function buildTimeline() {
+    const viewport = document.querySelector('.timeline-viewport');
+    const viewportWidth = viewport.offsetWidth;
+    const windowMinutes = HOURS_VISIBLE * 60 * 2;
+    const pixelsPerMinute = viewportWidth / windowMinutes;
+
+    const timeline = document.getElementById('timeline');
+    timeline.innerHTML = '';
+
+    const dayStart = 0;
+    const dayEnd = 24 * 60;
+    const totalWidth = (dayEnd - dayStart) * pixelsPerMinute;
+
+    timeline.style.width = totalWidth + 'px';
+
+    let cursor = dayStart;
+
+    for (const block of schedule) {
+        const blockStart = timeToMinutes(block.start);
+        const blockEnd = timeToMinutes(block.end);
+
+        if (blockStart > cursor) {
+            const gapLeft = cursor * pixelsPerMinute;
+            const gapWidth = (blockStart - cursor) * pixelsPerMinute;
+            const gap = document.createElement('div');
+            gap.className = 'block gap-block inactive';
+            gap.style.left = gapLeft + 'px';
+            gap.style.width = gapWidth + 'px';
+            gap.dataset.start = cursor;
+            gap.dataset.end = blockStart;
+            gap.dataset.task = 'Nothing scheduled';
+
+            const label = document.createElement('span');
+            label.className = 'block-label';
+            label.textContent = 'Nothing scheduled';
+            gap.appendChild(label);
+
+            timeline.appendChild(gap);
+        }
+
+        const blockLeft = blockStart * pixelsPerMinute;
+        const width = (blockEnd - blockStart) * pixelsPerMinute;
+        const div = document.createElement('div');
+
+        div.className = 'block inactive';
+        div.style.left = blockLeft + 'px';
+        div.style.width = width + 'px';
+        div.style.background = block.color;
+        div.dataset.start = blockStart;
+        div.dataset.end = blockEnd;
+        div.dataset.task = block.task;
+
+        const label = document.createElement('span');
+        label.className = 'block-label';
+        label.textContent = block.task;
+        div.appendChild(label);
+
+        timeline.appendChild(div);
+        cursor = blockEnd;
+    }
+
+    if (cursor < dayEnd) {
+        const gapLeft = cursor * pixelsPerMinute;
+        const gapWidth = (dayEnd - cursor) * pixelsPerMinute;
+        const gap = document.createElement('div');
+        gap.className = 'block gap-block inactive';
+        gap.style.left = gapLeft + 'px';
+        gap.style.width = gapWidth + 'px';
+        gap.dataset.start = cursor;
+        gap.dataset.end = dayEnd;
+        gap.dataset.task = 'Nothing scheduled';
+
+        const label = document.createElement('span');
+        label.className = 'block-label';
+        label.textContent = 'Nothing scheduled';
+        gap.appendChild(label);
+
+        timeline.appendChild(gap);
+    }
+
+    timelineBuilt = true;
+}
+
+function render() {
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes() + (now.getSeconds() / 60) + (now.getMilliseconds() / 60000);
+
+    const windowMinutes = HOURS_VISIBLE * 60 * 2;
+
+    // Update date display
+    const dateEl = document.getElementById('currentDate');
+    const newDateText = formatDate(now);
+    if (dateEl.textContent !== newDateText) {
+        dateEl.textContent = newDateText;
+    }
+
+    let currentTask = null;
+    let currentBlock = null;
+
+    for (const block of schedule) {
+        const start = timeToMinutes(block.start);
+        const end = timeToMinutes(block.end);
+        if (nowMinutes >= start && nowMinutes < end) {
+            currentTask = block.task;
+            currentBlock = { ...block, startMin: start, endMin: end };
+            break;
+        }
+    }
+
+    if (!currentTask) {
+        let gapStart = 0;
+        let gapEnd = 24 * 60;
+
+        for (const block of schedule) {
+            const start = timeToMinutes(block.start);
+            const end = timeToMinutes(block.end);
+
+            if (end <= nowMinutes) {
+                gapStart = end;
+            }
+            if (start > nowMinutes && start < gapEnd) {
+                gapEnd = start;
+            }
+        }
+
+        currentTask = 'Nothing scheduled';
+        currentBlock = { task: 'Nothing scheduled', startMin: gapStart, endMin: gapEnd };
+    }
+
+    const taskNameEl = document.getElementById('taskName');
+    const timeLeftEl = document.getElementById('timeLeft');
+
+    if (taskNameEl.textContent !== currentTask) {
+        taskNameEl.textContent = currentTask;
+        if (currentTask === 'Nothing scheduled') {
+            taskNameEl.classList.add('free');
+        } else {
+            taskNameEl.classList.remove('free');
+        }
+    }
+
+    const remaining = Math.ceil(currentBlock.endMin - nowMinutes);
+    const durationText = formatDuration(remaining) + ' left';
+    if (timeLeftEl.textContent !== durationText) {
+        timeLeftEl.textContent = durationText;
+    }
+    timeLeftEl.style.display = 'inline-block';
+
+    if (!timelineBuilt) {
+        buildTimeline();
+    }
+
+    const viewport = document.querySelector('.timeline-viewport');
+    const viewportWidth = viewport.offsetWidth;
+    const pixelsPerMinute = viewportWidth / windowMinutes;
+
+    const timeline = document.getElementById('timeline');
+
+    const offset = (nowMinutes * pixelsPerMinute) - (viewportWidth / 2);
+    timeline.style.left = -offset + 'px';
+
+    const blocks = timeline.querySelectorAll('.block');
+    blocks.forEach(block => {
+        const start = parseFloat(block.dataset.start);
+        const end = parseFloat(block.dataset.end);
+
+        const isActive = nowMinutes >= start && nowMinutes < end;
+        const isPast = nowMinutes >= end;
+
+        block.classList.remove('active', 'inactive', 'past');
+
+        if (isActive) {
+            block.classList.add('active');
+        } else {
+            block.classList.add('inactive');
+        }
+        if (isPast) {
+            block.classList.add('past');
+        }
+    });
+
+    const labels = document.getElementById('timeLabels');
+
+    let startTimeText = '—';
+    let endTimeText = '—';
+
+    if (currentBlock) {
+        startTimeText = formatTimeFromMinutes(currentBlock.startMin);
+        endTimeText = formatTimeFromMinutes(currentBlock.endMin);
+    }
+
+    const newLabelsHTML = `
+        <span class="time-label">${startTimeText}</span>
+        <span class="time-label">${formatTime12(now)}</span>
+        <span class="time-label">${endTimeText}</span>
+    `;
+    if (labels.innerHTML !== newLabelsHTML) {
+        labels.innerHTML = newLabelsHTML;
+    }
+}
+
+function updateAll() {
+    render();
+    renderSecondsTicker();
+    requestAnimationFrame(updateAll);
+}
+
+function init() {
+    render();
+    renderSecondsTicker();
+    requestAnimationFrame(updateAll);
+
+    window.addEventListener('resize', () => {
+        timelineBuilt = false;
+        render();
+        renderSecondsTicker();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', init);
