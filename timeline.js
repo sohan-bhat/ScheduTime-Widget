@@ -1,10 +1,55 @@
-const schedule = [
-    { start: "08:00", end: "12:00", task: "School", color: "#6366f1" },
-    { start: "12:00", end: "13:00", task: "Lunch", color: "#22c55e" },
-    { start: "13:00", end: "15:00", task: "Study", color: "#3b82f6" },
-    { start: "15:30", end: "17:00", task: "Free time", color: "#f59e0b" },
-    { start: "18:00", end: "19:00", task: "Dinner", color: "#a855f7" },
+// Default schedule (used if no URL params provided)
+const defaultSchedule = [
+    { start: "08:00", end: "12:00", task: "School", color: "#6366f1", days: "weekdays" },
+    { start: "12:00", end: "13:00", task: "Lunch", color: "#22c55e", days: "both" },
+    { start: "13:00", end: "15:00", task: "Study", color: "#3b82f6", days: "weekdays" },
+    { start: "15:30", end: "17:00", task: "Free time", color: "#f59e0b", days: "both" },
+    { start: "18:00", end: "19:00", task: "Dinner", color: "#a855f7", days: "both" },
 ];
+
+function parseScheduleFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const scheduleParam = params.get('schedule');
+
+    if (!scheduleParam) {
+        return defaultSchedule;
+    }
+
+    try {
+        const tasks = scheduleParam.split(',').map(taskStr => {
+            const [task, start, end, color, days] = taskStr.split('|');
+            return {
+                task: decodeURIComponent(task),
+                start,
+                end,
+                color: `#${color}`,
+                days: days || 'both'
+            };
+        });
+        return tasks;
+    } catch (e) {
+        console.error('Failed to parse schedule from URL:', e);
+        return defaultSchedule;
+    }
+}
+
+function isWeekend() {
+    const day = new Date().getDay();
+    return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+}
+
+function filterScheduleForToday(fullSchedule) {
+    const weekend = isWeekend();
+    return fullSchedule.filter(task => {
+        if (task.days === 'both') return true;
+        if (task.days === 'weekends' && weekend) return true;
+        if (task.days === 'weekdays' && !weekend) return true;
+        return false;
+    });
+}
+
+const fullSchedule = parseScheduleFromUrl();
+const schedule = filterScheduleForToday(fullSchedule);
 
 const HOURS_VISIBLE = 3;
 

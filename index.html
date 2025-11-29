@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Builder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="configure.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="page-header">
+            <h1>Schedule Builder</h1>
+            <p class="subtitle">Create your custom timeline and embed it in Notion</p>
+        </header>
+
+        <div class="tasks-section">
+            <div class="section-header">
+                <h2>Tasks</h2>
+                <button class="btn btn-add" id="addTaskBtn">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    Add Task
+                </button>
+            </div>
+
+            <div class="tasks-list" id="tasksList">
+                <!-- Tasks will be added here dynamically -->
+            </div>
+
+            <div class="empty-state" id="emptyState">
+                <p>No tasks yet. Click "Add Task" to get started.</p>
+            </div>
+        </div>
+
+        <div class="generate-section">
+            <button class="btn btn-primary" id="generateBtn">Generate Timeline Link</button>
+        </div>
+
+        <div class="output-section" id="outputSection" style="display: none;">
+            <h3>Your Timeline URL</h3>
+            <p class="output-hint">Copy this link and paste it into a Notion embed block</p>
+            <div class="url-box">
+                <input type="text" id="generatedUrl" readonly>
+                <button class="btn btn-copy" id="copyBtn">Copy</button>
+            </div>
+            <div class="preview-link">
+                <a href="#" id="previewLink" target="_blank">Preview Timeline</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Template -->
+    <template id="taskTemplate">
+        <div class="task-card" data-id="">
+            <div class="task-header">
+                <div class="color-picker-wrapper">
+                    <input type="color" class="color-picker" value="#6366f1">
+                    <div class="color-preview"></div>
+                </div>
+                <input type="text" class="task-name-input" placeholder="Task name" maxlength="50">
+                <button class="btn-remove" title="Remove task">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="task-body">
+                <div class="time-inputs">
+                    <div class="time-field">
+                        <label>Start</label>
+                        <input type="time" class="time-input start-time" value="09:00">
+                    </div>
+                    <span class="time-separator">to</span>
+                    <div class="time-field">
+                        <label>End</label>
+                        <input type="time" class="time-input end-time" value="10:00">
+                    </div>
+                </div>
+                <div class="days-selector">
+                    <label>Days</label>
+                    <div class="days-options">
+                        <button class="day-option" data-value="weekdays">Weekdays</button>
+                        <button class="day-option active" data-value="both">Both</button>
+                        <button class="day-option" data-value="weekends">Weekends</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="configure.js"></script>
+</body>
+
+</html>
