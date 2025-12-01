@@ -33,14 +33,14 @@ body {
     position: fixed;
     top: 16px;
     left: 16px;
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 6px;
     color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -207,16 +207,6 @@ body {
 
 .block.gap-block {
     background: var(--bg-tertiary);
-}
-
-.block.overlapping {
-    height: var(--overlap-height, 28px);
-    top: 50%;
-    transform: translateY(calc(-50% + var(--overlap-offset, 0px)));
-}
-
-.block.overlapping.active {
-    height: var(--overlap-height, 60px);
 }
 
 .block-label {

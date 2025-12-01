@@ -248,112 +248,6 @@ function renderSecondsTicker() {
     lastSecond = currentSecond;
 }
 
-function calculateOverlaps(tasks) {
-    // Convert tasks to time ranges with minutes
-    const ranges = tasks.map((task, index) => ({
-        index,
-        start: timeToMinutes(task.start),
-        end: timeToMinutes(task.end),
-        task: task.task,
-        color: task.color
-    }));
-
-    // Sort by start time, then by end time
-    ranges.sort((a, b) => a.start - b.start || a.end - b.end);
-
-    // Assign rows using a greedy interval scheduling approach
-    const result = ranges.map(r => ({ ...r, row: -1, totalRows: 1 }));
-    const rows = []; // Each row tracks end time of last task in that row
-
-    for (let i = 0; i < ranges.length; i++) {
-        const current = ranges[i];
-
-        // Find the first row where this task doesn't overlap
-        let assignedRow = -1;
-        for (let r = 0; r < rows.length; r++) {
-            if (rows[r] <= current.start) {
-                assignedRow = r;
-                rows[r] = current.end;
-                break;
-            }
-        }
-
-        // If no existing row works, create a new one
-        if (assignedRow === -1) {
-            assignedRow = rows.length;
-            rows.push(current.end);
-        }
-
-        result[i].row = assignedRow;
-    }
-
-    // Now calculate totalRows for each task based on overlapping tasks
-    for (let i = 0; i < result.length; i++) {
-        const current = result[i];
-        let maxOverlapRows = 1;
-
-        for (let j = 0; j < result.length; j++) {
-            if (i === j) continue;
-            const other = result[j];
-            // Check if they overlap
-            if (current.start < other.end && other.start < current.end) {
-                maxOverlapRows = Math.max(maxOverlapRows, other.row + 1, current.row + 1);
-            }
-        }
-
-        result[i].totalRows = maxOverlapRows;
-    }
-
-    // Re-map to original order (by index)
-    const finalResult = [];
-    for (const r of result) {
-        finalResult[r.index] = r;
-    }
-
-    return finalResult.filter(r => r !== undefined);
-}
-
-function findGaps(tasks, dayStart, dayEnd) {
-    if (tasks.length === 0) {
-        return [{ start: dayStart, end: dayEnd }];
-    }
-
-    const gaps = [];
-    const events = [];
-
-    for (const task of tasks) {
-        const start = timeToMinutes(task.start);
-        const end = timeToMinutes(task.end);
-        events.push({ time: start, type: 'start' });
-        events.push({ time: end, type: 'end' });
-    }
-
-    events.sort((a, b) => a.time - b.time || (a.type === 'end' ? -1 : 1));
-
-    let activeCount = 0;
-    let lastTime = dayStart;
-
-    for (const event of events) {
-        if (activeCount === 0 && event.time > lastTime) {
-            gaps.push({ start: lastTime, end: event.time });
-        }
-
-        if (event.type === 'start') {
-            activeCount++;
-        } else {
-            activeCount--;
-        }
-
-        lastTime = event.time;
-    }
-
-    if (lastTime < dayEnd) {
-        gaps.push({ start: lastTime, end: dayEnd });
-    }
-
-    return gaps;
-}
-
 function buildTimeline() {
     const viewport = document.querySelector('.timeline-viewport');
     const viewportWidth = viewport.offsetWidth;
@@ -369,22 +263,67 @@ function buildTimeline() {
 
     timeline.style.width = totalWidth + 'px';
 
-    // Calculate overlaps
-    const tasksWithOverlaps = calculateOverlaps(schedule);
+    // Sort schedule by start time
+    const sortedSchedule = [...schedule].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
 
-    // Find gaps (where nothing is scheduled)
-    const gaps = findGaps(schedule, dayStart, dayEnd);
+    let lastEnd = dayStart;
 
-    // Render gaps first
-    for (const gap of gaps) {
-        const gapLeft = gap.start * pixelsPerMinute;
-        const gapWidth = (gap.end - gap.start) * pixelsPerMinute;
+    for (const block of sortedSchedule) {
+        const start = timeToMinutes(block.start);
+        const end = timeToMinutes(block.end);
+
+        // Add gap block if there's a gap of 1 hour or more
+        if (start > lastEnd && (start - lastEnd) >= 60) {
+            const gapLeft = lastEnd * pixelsPerMinute;
+            const gapWidth = (start - lastEnd) * pixelsPerMinute;
+            const gapDiv = document.createElement('div');
+            gapDiv.className = 'block gap-block inactive';
+            gapDiv.style.left = gapLeft + 'px';
+            gapDiv.style.width = gapWidth + 'px';
+            gapDiv.dataset.start = lastEnd;
+            gapDiv.dataset.end = start;
+            gapDiv.dataset.task = 'Nothing scheduled';
+
+            const label = document.createElement('span');
+            label.className = 'block-label';
+            label.textContent = 'Nothing scheduled';
+            gapDiv.appendChild(label);
+
+            timeline.appendChild(gapDiv);
+        }
+
+        const blockLeft = start * pixelsPerMinute;
+        const width = (end - start) * pixelsPerMinute;
+        const div = document.createElement('div');
+
+        div.className = 'block inactive';
+        div.style.left = blockLeft + 'px';
+        div.style.width = width + 'px';
+        div.style.background = block.color;
+        div.dataset.start = start;
+        div.dataset.end = end;
+        div.dataset.task = block.task;
+
+        const label = document.createElement('span');
+        label.className = 'block-label';
+        label.textContent = block.task;
+        div.appendChild(label);
+
+        timeline.appendChild(div);
+
+        lastEnd = Math.max(lastEnd, end);
+    }
+
+    // Add final gap if needed (only if 1 hour or more)
+    if (lastEnd < dayEnd && (dayEnd - lastEnd) >= 60) {
+        const gapLeft = lastEnd * pixelsPerMinute;
+        const gapWidth = (dayEnd - lastEnd) * pixelsPerMinute;
         const gapDiv = document.createElement('div');
         gapDiv.className = 'block gap-block inactive';
         gapDiv.style.left = gapLeft + 'px';
         gapDiv.style.width = gapWidth + 'px';
-        gapDiv.dataset.start = gap.start;
-        gapDiv.dataset.end = gap.end;
+        gapDiv.dataset.start = lastEnd;
+        gapDiv.dataset.end = dayEnd;
         gapDiv.dataset.task = 'Nothing scheduled';
 
         const label = document.createElement('span');
@@ -393,37 +332,6 @@ function buildTimeline() {
         gapDiv.appendChild(label);
 
         timeline.appendChild(gapDiv);
-    }
-
-    // Render task blocks
-    for (const block of tasksWithOverlaps) {
-        const blockLeft = block.start * pixelsPerMinute;
-        const width = (block.end - block.start) * pixelsPerMinute;
-        const div = document.createElement('div');
-
-        div.className = 'block inactive';
-        div.style.left = blockLeft + 'px';
-        div.style.width = width + 'px';
-        div.style.background = block.color;
-        div.dataset.start = block.start;
-        div.dataset.end = block.end;
-        div.dataset.task = block.task;
-        div.dataset.row = block.row;
-        div.dataset.totalRows = block.totalRows;
-
-        // Apply overlap styling
-        if (block.totalRows > 1) {
-            div.classList.add('overlapping');
-            div.dataset.overlapRow = block.row;
-            div.dataset.overlapTotal = block.totalRows;
-        }
-
-        const label = document.createElement('span');
-        label.className = 'block-label';
-        label.textContent = block.task;
-        div.appendChild(label);
-
-        timeline.appendChild(div);
     }
 
     timelineBuilt = true;
@@ -524,20 +432,6 @@ function render() {
         }
         if (isPast) {
             block.classList.add('past');
-        }
-
-        // Apply overlap positioning
-        if (block.classList.contains('overlapping')) {
-            const row = parseInt(block.dataset.overlapRow) || 0;
-            const totalRows = parseInt(block.dataset.overlapTotal) || 1;
-            const gap = 2; // gap between overlapping blocks in px
-            const baseHeight = isActive ? 60 : 28;
-            const blockHeight = (baseHeight - (gap * (totalRows - 1))) / totalRows;
-            const topOffset = row * (blockHeight + gap);
-
-            block.style.setProperty('--overlap-height', blockHeight + 'px');
-            block.style.setProperty('--overlap-offset', topOffset + 'px');
-            block.style.setProperty('--overlap-total', totalRows);
         }
     });
 
