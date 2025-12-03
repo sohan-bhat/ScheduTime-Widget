@@ -104,9 +104,39 @@
 
     <!-- Add Schedule Menu -->
     <div class="dropdown-menu" id="addScheduleMenu" style="display: none;">
+        <button class="dropdown-item" data-type="aday">A Day</button>
+        <button class="dropdown-item" data-type="bday">B Day</button>
         <button class="dropdown-item" data-type="weekdays">Weekdays</button>
         <button class="dropdown-item" data-type="weekends">Weekends</button>
         <button class="dropdown-item" data-type="custom">Custom dates...</button>
+    </div>
+
+    <!-- A/B Day Sync Modal -->
+    <div class="modal-overlay" id="syncModal" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Sync A/B Days</h3>
+                <button class="modal-close" id="closeSyncModal">&times;</button>
+            </div>
+            <div class="modal-body sync-modal-body">
+                <p class="sync-question">What day is today?</p>
+                <div class="sync-options">
+                    <button class="sync-option" data-day="A">
+                        <span class="sync-option-label">A</span>
+                        <span class="sync-option-desc">A Day</span>
+                    </button>
+                    <button class="sync-option" data-day="B">
+                        <span class="sync-option-label">B</span>
+                        <span class="sync-option-desc">B Day</span>
+                    </button>
+                </div>
+                <p class="sync-date-display" id="syncDateDisplay"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelSync">Cancel</button>
+                <button class="btn btn-primary btn-sm" id="confirmSync">Save</button>
+            </div>
+        </div>
     </div>
 
     <!-- Date Range Picker Modal -->

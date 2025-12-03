@@ -7,17 +7,21 @@ let currentScheduleId = null;
 let hasGeneratedOnce = false;
 let hasUnsavedChanges = false;
 
+// A/B Day calibration - stored as { date: Date, isADay: boolean }
+let abDayCalibration = null;
+
 // Calendar state
 let calendarDate = new Date();
 let rangeStart = null;
 let rangeEnd = null;
-let selectedDateRanges = []; // Array of {start, end} objects
+let selectedDateRanges = [];
 
 // DOM elements
 const scheduleTabs = document.getElementById('scheduleTabs');
 const addTabBtn = document.getElementById('addTabBtn');
 const addScheduleMenu = document.getElementById('addScheduleMenu');
 const datePickerModal = document.getElementById('datePickerModal');
+const syncModal = document.getElementById('syncModal');
 const tasksList = document.getElementById('tasksList');
 const emptyState = document.getElementById('emptyState');
 const addTaskBtn = document.getElementById('addTaskBtn');
@@ -42,7 +46,7 @@ function getNextColor(scheduleId) {
 function markUnsaved() {
     if (hasGeneratedOnce) {
         hasUnsavedChanges = true;
-        unsavedIndicator.style.display = 'flex';
+        unsavedIndicator.style.display = 'block';
     }
 }
 
@@ -51,13 +55,52 @@ function markSaved() {
     unsavedIndicator.style.display = 'none';
 }
 
+// A/B Day calculation
+function countWeekdaysBetween(startDate, endDate) {
+    let count = 0;
+    const current = new Date(startDate);
+    current.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+
+    while (current < end) {
+        current.setDate(current.getDate() + 1);
+        const day = current.getDay();
+        if (day !== 0 && day !== 6) count++;
+    }
+    return count;
+}
+
+function isTodayADay() {
+    if (!abDayCalibration) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const refDate = new Date(abDayCalibration.date);
+    refDate.setHours(0, 0, 0, 0);
+
+    // Check if today is weekend
+    const todayDay = today.getDay();
+    if (todayDay === 0 || todayDay === 6) return null;
+
+    const weekdaysPassed = countWeekdaysBetween(refDate, today);
+    const isADay = abDayCalibration.isADay ? (weekdaysPassed % 2 === 0) : (weekdaysPassed % 2 === 1);
+    return isADay;
+}
+
+function formatDateFull(date) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+}
+
 // Schedule functions
 function createSchedule(type, dateRanges = null) {
     const id = ++scheduleIdCounter;
     const schedule = {
         id,
         type,
-        dateRanges, // Array of {start, end} for custom, null for others
+        dateRanges,
         tasks: []
     };
     schedules.set(id, schedule);
@@ -67,6 +110,8 @@ function createSchedule(type, dateRanges = null) {
 
 function getScheduleLabel(schedule) {
     if (schedule.type === 'always') return 'Always';
+    if (schedule.type === 'aday') return 'A Day';
+    if (schedule.type === 'bday') return 'B Day';
     if (schedule.type === 'weekdays') return 'Weekdays';
     if (schedule.type === 'weekends') return 'Weekends';
     if (schedule.type === 'custom' && schedule.dateRanges && schedule.dateRanges.length > 0) {
@@ -77,7 +122,7 @@ function getScheduleLabel(schedule) {
             }
             return `${formatDateShort(r.start)} - ${formatDateShort(r.end)}`;
         }
-        return `${schedule.dateRanges.length} date ranges`;
+        return `${schedule.dateRanges.length} dates`;
     }
     return 'Custom';
 }
@@ -128,43 +173,215 @@ function checkCustomOverlap(newRanges, excludeId = null) {
     return false;
 }
 
+// Tab drag state
+let isDragging = false;
+let draggedTabEl = null;
+let draggedScheduleId = null;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragClone = null;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+
 // Tab rendering
 function renderTabs() {
     const existingTabs = scheduleTabs.querySelectorAll('.tab');
     existingTabs.forEach(tab => tab.remove());
 
     for (const schedule of schedules.values()) {
-        const tab = document.createElement('button');
+        const tab = document.createElement('div');
         tab.className = 'tab' + (schedule.id === currentScheduleId ? ' active' : '');
         tab.dataset.scheduleId = schedule.id;
 
-        if (schedule.type !== 'always') {
+        const isABDay = schedule.type === 'aday' || schedule.type === 'bday';
+
+        // All tabs are removable (as long as there's more than one)
+        if (schedules.size > 1) {
             tab.classList.add('removable');
-            const removeBtn = document.createElement('span');
-            removeBtn.className = 'tab-remove';
-            removeBtn.innerHTML = '×';
-            removeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                removeSchedule(schedule.id);
-            });
-            tab.appendChild(removeBtn);
         }
+        if (isABDay) {
+            tab.classList.add('has-sync');
+            const syncBtn = document.createElement('span');
+            syncBtn.className = 'tab-sync';
+            syncBtn.textContent = 'sync';
+            syncBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openSyncModal();
+            });
+            tab.appendChild(syncBtn);
+        }
+        // Add drag handle (hamburger icon)
+        const dragHandle = document.createElement('span');
+        dragHandle.className = 'tab-drag-handle';
+        dragHandle.innerHTML = '<span></span><span></span><span></span>';
+        tab.appendChild(dragHandle);
 
-        const label = document.createTextNode(getScheduleLabel(schedule));
-        tab.insertBefore(label, tab.firstChild);
+        const removeBtn = document.createElement('span');
+        removeBtn.className = 'tab-remove';
+        removeBtn.innerHTML = '×';
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeSchedule(schedule.id);
+        });
+        tab.appendChild(removeBtn);
 
-        tab.addEventListener('click', () => switchToSchedule(schedule.id));
+        const label = document.createElement('span');
+        label.className = 'tab-label';
+        label.textContent = getScheduleLabel(schedule);
+        tab.appendChild(label);
+
+        tab.addEventListener('click', () => {
+            if (!isDragging) switchToSchedule(schedule.id);
+        });
+
+        // Mouse drag events
+        tab.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('tab-remove') || e.target.classList.contains('tab-sync')) return;
+            if (e.button !== 0) return; // Only left click
+
+            const rect = tab.getBoundingClientRect();
+            draggedTabEl = tab;
+            draggedScheduleId = schedule.id;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+
+            e.preventDefault();
+        });
+
         scheduleTabs.insertBefore(tab, addTabBtn);
     }
 
     updateAddMenu();
 }
 
+// Global mouse handlers for dragging
+document.addEventListener('mousemove', (e) => {
+    if (!draggedTabEl) return;
+
+    const dx = Math.abs(e.clientX - dragStartX);
+    const dy = Math.abs(e.clientY - dragStartY);
+
+    // Start dragging after moving 5px
+    if (!isDragging && (dx > 5 || dy > 5)) {
+        isDragging = true;
+        draggedTabEl.classList.add('dragging');
+
+        // Create floating clone with explicit dimensions
+        const rect = draggedTabEl.getBoundingClientRect();
+        dragClone = draggedTabEl.cloneNode(true);
+        dragClone.classList.add('tab-clone');
+        dragClone.classList.remove('dragging', 'active');
+        dragClone.style.width = rect.width + 'px';
+        dragClone.style.height = rect.height + 'px';
+        dragClone.style.left = (e.clientX - dragOffsetX) + 'px';
+        dragClone.style.top = (e.clientY - dragOffsetY) + 'px';
+        document.body.appendChild(dragClone);
+    }
+
+    if (!isDragging) return;
+
+    // Move clone with cursor
+    if (dragClone) {
+        dragClone.style.left = (e.clientX - dragOffsetX) + 'px';
+        dragClone.style.top = (e.clientY - dragOffsetY) + 'px';
+    }
+
+    // Find tab under cursor
+    const tabs = scheduleTabs.querySelectorAll('.tab');
+    tabs.forEach(tab => {
+        if (tab === draggedTabEl) {
+            tab.classList.remove('drag-over');
+            return;
+        }
+
+        const rect = tab.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            tab.classList.add('drag-over');
+        } else {
+            tab.classList.remove('drag-over');
+        }
+    });
+});
+
+document.addEventListener('mouseup', (e) => {
+    if (!draggedTabEl) return;
+
+    if (isDragging) {
+        // Remove clone
+        if (dragClone) {
+            dragClone.remove();
+            dragClone = null;
+        }
+
+        // Find drop target
+        const tabs = scheduleTabs.querySelectorAll('.tab');
+        let dropTarget = null;
+
+        tabs.forEach(tab => {
+            const rect = tab.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                if (tab !== draggedTabEl) {
+                    dropTarget = tab;
+                }
+            }
+            tab.classList.remove('drag-over');
+        });
+
+        if (dropTarget) {
+            const targetId = parseInt(dropTarget.dataset.scheduleId);
+            const movedId = draggedScheduleId;
+
+            reorderSchedules(movedId, targetId);
+            markUnsaved();
+            renderTabs();
+
+            // Settle animation
+            requestAnimationFrame(() => {
+                const droppedTab = scheduleTabs.querySelector(`[data-schedule-id="${movedId}"]`);
+                if (droppedTab) {
+                    droppedTab.classList.add('just-dropped');
+                    setTimeout(() => droppedTab.classList.remove('just-dropped'), 300);
+                }
+            });
+        }
+
+        draggedTabEl.classList.remove('dragging');
+    }
+
+    isDragging = false;
+    draggedTabEl = null;
+    draggedScheduleId = null;
+});
+
+function reorderSchedules(fromId, toId) {
+    const entries = Array.from(schedules.entries());
+    const fromIndex = entries.findIndex(([id]) => id === fromId);
+    const toIndex = entries.findIndex(([id]) => id === toId);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const [removed] = entries.splice(fromIndex, 1);
+    entries.splice(toIndex, 0, removed);
+
+    schedules.clear();
+    for (const [id, schedule] of entries) {
+        schedules.set(id, schedule);
+    }
+}
+
 function updateAddMenu() {
+    const adayItem = addScheduleMenu.querySelector('[data-type="aday"]');
+    const bdayItem = addScheduleMenu.querySelector('[data-type="bday"]');
     const weekdaysItem = addScheduleMenu.querySelector('[data-type="weekdays"]');
     const weekendsItem = addScheduleMenu.querySelector('[data-type="weekends"]');
     const customItem = addScheduleMenu.querySelector('[data-type="custom"]');
 
+    adayItem.disabled = hasScheduleType('aday');
+    bdayItem.disabled = hasScheduleType('bday');
     weekdaysItem.disabled = hasScheduleType('weekdays');
     weekendsItem.disabled = hasScheduleType('weekends');
     customItem.disabled = getCustomScheduleCount() >= 3;
@@ -178,17 +395,19 @@ function switchToSchedule(scheduleId) {
 
 function removeSchedule(scheduleId) {
     const schedule = schedules.get(scheduleId);
-    if (!schedule || schedule.type === 'always') return;
+    if (!schedule) return;
+
+    // Prevent deletion if it's the only remaining tab
+    if (schedules.size <= 1) return;
 
     schedules.delete(scheduleId);
     markUnsaved();
 
     if (currentScheduleId === scheduleId) {
-        for (const s of schedules.values()) {
-            if (s.type === 'always') {
-                currentScheduleId = s.id;
-                break;
-            }
+        // Switch to the first remaining schedule
+        const firstSchedule = schedules.values().next().value;
+        if (firstSchedule) {
+            currentScheduleId = firstSchedule.id;
         }
     }
 
@@ -220,7 +439,6 @@ function createTaskCard(scheduleId, taskData = null) {
         endTime.value = taskData.end || '10:00';
     }
 
-    // Track changes
     const trackChange = () => markUnsaved();
     colorPicker.addEventListener('input', (e) => {
         colorPreview.style.background = e.target.value;
@@ -342,6 +560,78 @@ function addTask(taskData = null) {
     }
 }
 
+// Sync Modal
+let selectedSyncDay = null;
+
+function openSyncModal() {
+    selectedSyncDay = null;
+    document.querySelectorAll('.sync-option').forEach(opt => opt.classList.remove('selected'));
+
+    const today = new Date();
+    document.getElementById('syncDateDisplay').textContent = `Today is ${formatDateFull(today)}`;
+
+    syncModal.style.display = 'flex';
+}
+
+function closeSyncModal() {
+    syncModal.style.display = 'none';
+}
+
+document.querySelectorAll('.sync-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+        document.querySelectorAll('.sync-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        selectedSyncDay = opt.dataset.day;
+    });
+});
+
+document.getElementById('closeSyncModal').addEventListener('click', closeSyncModal);
+document.getElementById('cancelSync').addEventListener('click', closeSyncModal);
+
+syncModal.addEventListener('click', (e) => {
+    if (e.target === syncModal) closeSyncModal();
+});
+
+document.getElementById('confirmSync').addEventListener('click', () => {
+    if (!selectedSyncDay) {
+        alert('Please select A Day or B Day');
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    abDayCalibration = {
+        date: today,
+        isADay: selectedSyncDay === 'A'
+    };
+
+    // Save to localStorage
+    localStorage.setItem('abDayCalibration', JSON.stringify({
+        date: today.toISOString(),
+        isADay: abDayCalibration.isADay
+    }));
+
+    markUnsaved();
+    closeSyncModal();
+});
+
+// Load calibration from localStorage
+function loadCalibration() {
+    const saved = localStorage.getItem('abDayCalibration');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            abDayCalibration = {
+                date: new Date(data.date),
+                isADay: data.isADay
+            };
+        } catch (e) {
+            console.error('Failed to load A/B day calibration:', e);
+        }
+    }
+}
+
 // Calendar functions
 function renderCalendar() {
     const year = calendarDate.getFullYear();
@@ -382,7 +672,6 @@ function renderCalendar() {
             btn.classList.add('today');
         }
 
-        // Highlight current selection
         if (rangeStart && rangeEnd) {
             const startTime = rangeStart.getTime();
             const endTime = rangeEnd.getTime();
@@ -395,7 +684,6 @@ function renderCalendar() {
             btn.classList.add('range-start', 'range-end');
         }
 
-        // Highlight already added ranges
         for (const range of selectedDateRanges) {
             const startTime = range.start.getTime();
             const endTime = range.end.getTime();
@@ -485,7 +773,6 @@ function addCurrentSelection() {
         end: rangeEnd || rangeStart
     };
 
-    // Check for internal overlap
     for (const existing of selectedDateRanges) {
         if (doDateRangesOverlap(newRange, existing)) {
             alert('This selection overlaps with another selection.');
@@ -517,13 +804,26 @@ function getScheduleDays(schedule) {
     switch (schedule.type) {
         case 'always':
             return 'both';
+        case 'aday':
+            if (abDayCalibration) {
+                const refDate = formatDateForUrl(abDayCalibration.date);
+                const refDay = abDayCalibration.isADay ? 'A' : 'B';
+                return `aday_${refDate}_${refDay}`;
+            }
+            return 'aday';
+        case 'bday':
+            if (abDayCalibration) {
+                const refDate = formatDateForUrl(abDayCalibration.date);
+                const refDay = abDayCalibration.isADay ? 'A' : 'B';
+                return `bday_${refDate}_${refDay}`;
+            }
+            return 'bday';
         case 'weekdays':
             return 'weekdays';
         case 'weekends':
             return 'weekends';
         case 'custom':
             if (schedule.dateRanges && schedule.dateRanges.length > 0) {
-                // Encode multiple ranges: c20241103-20241107_20250203-20250203
                 return 'c' + schedule.dateRanges.map(r =>
                     `${formatDateForUrl(r.start)}-${formatDateForUrl(r.end)}`
                 ).join('_');
@@ -536,6 +836,13 @@ function getScheduleDays(schedule) {
 
 function generateUrl() {
     const allTasks = [];
+
+    // Check if A/B day schedules exist but not calibrated
+    const hasABSchedule = hasScheduleType('aday') || hasScheduleType('bday');
+    if (hasABSchedule && !abDayCalibration) {
+        alert('Please sync your A/B days first. Hover over the A Day or B Day tab and click "sync".');
+        return null;
+    }
 
     for (const schedule of schedules.values()) {
         const taskValues = schedule.tasks.map(t => t.getValues()).filter(t => t.task);
@@ -601,6 +908,11 @@ addScheduleMenu.querySelectorAll('.dropdown-item').forEach(item => {
             currentScheduleId = schedule.id;
             renderTabs();
             renderTasks();
+
+            // Prompt sync for A/B days if not calibrated
+            if ((type === 'aday' || type === 'bday') && !abDayCalibration) {
+                setTimeout(() => openSyncModal(), 300);
+            }
         }
     });
 });
@@ -616,10 +928,8 @@ document.getElementById('nextMonth').addEventListener('click', () => {
     renderCalendar();
 });
 
-// Add selection button
 document.getElementById('addSelectionBtn').addEventListener('click', addCurrentSelection);
 
-// Modal controls
 document.getElementById('closeModal').addEventListener('click', closeDatePicker);
 document.getElementById('cancelDatePicker').addEventListener('click', closeDatePicker);
 
@@ -628,7 +938,6 @@ datePickerModal.addEventListener('click', (e) => {
 });
 
 document.getElementById('confirmDatePicker').addEventListener('click', () => {
-    // Add any pending selection
     if (rangeStart) {
         addCurrentSelection();
     }
@@ -684,7 +993,7 @@ style.textContent = `
     @keyframes slideOut {
         to {
             opacity: 0;
-            transform: translateY(-10px);
+            transform: translateY(-8px);
             height: 0;
             padding: 0;
             margin: 0;
@@ -694,18 +1003,160 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// Parse URL and reconstruct schedules
+function parseUrlSchedule() {
+    const params = new URLSearchParams(window.location.search);
+    const scheduleParam = params.get('schedule');
+
+    if (!scheduleParam) return null;
+
+    try {
+        const tasks = scheduleParam.split(',').map(taskStr => {
+            const [task, start, end, color, days] = taskStr.split('|');
+            return {
+                task: decodeURIComponent(task),
+                start,
+                end,
+                color: `#${color}`,
+                days: days || 'both'
+            };
+        });
+        return tasks;
+    } catch (e) {
+        console.error('Failed to parse schedule from URL:', e);
+        return null;
+    }
+}
+
+function getScheduleTypeFromDays(days) {
+    if (days === 'both') return { type: 'always' };
+    if (days === 'weekdays') return { type: 'weekdays' };
+    if (days === 'weekends') return { type: 'weekends' };
+    if (days.startsWith('aday_')) return { type: 'aday', calibration: parseABCalibration(days) };
+    if (days.startsWith('bday_')) return { type: 'bday', calibration: parseABCalibration(days) };
+    if (days.startsWith('c')) return { type: 'custom', dateRanges: parseCustomRanges(days) };
+    return { type: 'always' };
+}
+
+function parseABCalibration(days) {
+    // Format: aday_20251201_B or bday_20251201_A
+    const match = days.match(/^(?:aday|bday)_(\d{8})_([AB])$/);
+    if (!match) return null;
+
+    const [, dateStr, refDay] = match;
+    const y = parseInt(dateStr.slice(0, 4));
+    const m = parseInt(dateStr.slice(4, 6)) - 1;
+    const d = parseInt(dateStr.slice(6, 8));
+
+    return {
+        date: new Date(y, m, d),
+        isADay: refDay === 'A'
+    };
+}
+
+function parseCustomRanges(days) {
+    // Format: c20241103-20241107_20250203-20250203
+    if (!days.startsWith('c')) return null;
+
+    const parseDate = (str) => {
+        const y = parseInt(str.slice(0, 4));
+        const m = parseInt(str.slice(4, 6)) - 1;
+        const d = parseInt(str.slice(6, 8));
+        return new Date(y, m, d);
+    };
+
+    const rangeStrs = days.slice(1).split('_');
+    const ranges = [];
+
+    for (const rangeStr of rangeStrs) {
+        const parts = rangeStr.split('-');
+        if (parts.length === 2) {
+            ranges.push({
+                start: parseDate(parts[0]),
+                end: parseDate(parts[1])
+            });
+        }
+    }
+
+    return ranges.length > 0 ? ranges : null;
+}
+
+function loadFromUrl(tasks) {
+    // Group tasks by their schedule type
+    const scheduleMap = new Map(); // key: days string, value: { type, tasks, dateRanges, calibration }
+
+    for (const task of tasks) {
+        const days = task.days;
+
+        if (!scheduleMap.has(days)) {
+            const info = getScheduleTypeFromDays(days);
+            scheduleMap.set(days, {
+                ...info,
+                tasks: []
+            });
+        }
+
+        scheduleMap.get(days).tasks.push(task);
+    }
+
+    // Create schedules and add tasks
+    let firstScheduleId = null;
+    let calibrationSet = false;
+
+    for (const [days, info] of scheduleMap) {
+        // Set A/B day calibration if found
+        if (info.calibration && !calibrationSet) {
+            abDayCalibration = info.calibration;
+            localStorage.setItem('abDayCalibration', JSON.stringify({
+                date: abDayCalibration.date.toISOString(),
+                isADay: abDayCalibration.isADay
+            }));
+            calibrationSet = true;
+        }
+
+        const schedule = createSchedule(info.type, info.dateRanges || null);
+        if (!firstScheduleId) firstScheduleId = schedule.id;
+
+        currentScheduleId = schedule.id;
+        for (const task of info.tasks) {
+            addTask({
+                task: task.task,
+                start: task.start,
+                end: task.end,
+                color: task.color
+            });
+        }
+    }
+
+    if (firstScheduleId) {
+        currentScheduleId = firstScheduleId;
+    }
+}
+
 // Initialize
 function init() {
-    const alwaysSchedule = createSchedule('always');
-    currentScheduleId = alwaysSchedule.id;
+    loadCalibration();
 
-    addTask({ task: 'Morning Routine', start: '07:00', end: '08:00', color: '#a78bfa' });
-    addTask({ task: 'Lunch', start: '12:00', end: '13:00', color: '#6ee7b7' });
-    addTask({ task: 'Dinner', start: '18:00', end: '19:00', color: '#fcd34d' });
+    const urlTasks = parseUrlSchedule();
+
+    if (urlTasks && urlTasks.length > 0) {
+        // Load from URL
+        loadFromUrl(urlTasks);
+        // Clear URL params after loading
+        window.history.replaceState({}, '', window.location.pathname);
+    } else {
+        // Default initialization
+        const alwaysSchedule = createSchedule('always');
+        currentScheduleId = alwaysSchedule.id;
+
+        addTask({ task: 'Morning', start: '07:00', end: '08:00', color: '#a78bfa' });
+        addTask({ task: 'Lunch', start: '12:00', end: '13:00', color: '#6ee7b7' });
+        addTask({ task: 'Dinner', start: '18:00', end: '19:00', color: '#fcd34d' });
+    }
 
     renderTabs();
+    renderTasks();
 
-    // Reset unsaved state after init
     hasGeneratedOnce = false;
     hasUnsavedChanges = false;
 }

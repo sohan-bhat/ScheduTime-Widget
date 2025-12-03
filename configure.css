@@ -1,22 +1,22 @@
 :root {
-    --bg-primary: #0a0a0a;
-    --bg-card: #141414;
-    --bg-tertiary: #1c1c1c;
-    --bg-input: #1a1a1a;
-    --border: #262626;
-    --border-focus: #404040;
+    --bg-primary: #09090b;
+    --bg-card: #18181b;
+    --bg-tertiary: #27272a;
+    --bg-input: #1c1c1f;
+    --border: #3f3f46;
+    --border-focus: #52525b;
     --text-primary: #fafafa;
-    --text-secondary: #a3a3a3;
-    --text-muted: #525252;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
     --accent: #fafafa;
-    --accent-hover: #d4d4d4;
-    --accent-muted: rgba(250, 250, 250, 0.08);
+    --accent-hover: #e4e4e7;
+    --accent-muted: rgba(250, 250, 250, 0.06);
     --danger: #f87171;
     --danger-hover: #fca5a5;
     --success: #4ade80;
     --warning: #fbbf24;
-    --radius: 8px;
-    --radius-lg: 12px;
+    --radius: 6px;
+    --radius-lg: 10px;
 }
 
 * {
@@ -73,7 +73,7 @@ body {
     flex: 1;
     background: transparent;
     border: none;
-    padding: 10px 12px;
+    padding: 10px 12px 10px 24px;
     font-family: inherit;
     font-size: 13px;
     font-weight: 500;
@@ -81,6 +81,7 @@ body {
     cursor: pointer;
     border-radius: 6px;
     transition: all 0.2s ease;
+    position: relative;
 }
 
 .tab:hover {
@@ -106,6 +107,7 @@ body {
     border-radius: 6px;
     transition: all 0.2s ease;
     min-width: 36px;
+    flex: 0;
 }
 
 .tab-add:hover {
@@ -141,6 +143,174 @@ body {
 
 .tab-remove:hover {
     color: var(--danger);
+}
+
+/* Tab with sync button */
+.tab.has-sync {
+    padding-right: 52px;
+}
+
+/* Draggable tabs */
+.tab:not(.tab-add) {
+    cursor: grab;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tab-label {
+    flex: 1;
+    text-align: center;
+}
+
+.tab.dragging {
+    opacity: 0.3;
+    cursor: grabbing;
+}
+
+.tab.drag-over {
+    background: var(--bg-card);
+    box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Floating clone while dragging */
+.tab-clone {
+    position: fixed !important;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.9;
+    transform: rotate(2deg);
+    transform-origin: center center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: none !important;
+    flex: none !important;
+    margin: 0 !important;
+}
+
+/* Drag handle (hamburger icon) */
+.tab-drag-handle {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.tab:hover .tab-drag-handle {
+    opacity: 0.5;
+}
+
+.tab-drag-handle span {
+    display: block;
+    width: 10px;
+    height: 2px;
+    background: var(--text-secondary);
+    border-radius: 1px;
+}
+
+/* Tilt animation on drop */
+@keyframes tab-settle {
+    0% { transform: rotate(3deg); }
+    40% { transform: rotate(-2deg); }
+    70% { transform: rotate(1deg); }
+    100% { transform: rotate(0deg); }
+}
+
+.tab.just-dropped {
+    animation: tab-settle 0.3s ease-out;
+}
+
+.tab-sync {
+    position: absolute;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px 4px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tab.has-sync:hover .tab-sync {
+    opacity: 1;
+}
+
+.tab-sync:hover {
+    color: var(--text-primary);
+}
+
+/* Sync Modal */
+.sync-modal-body {
+    text-align: center;
+}
+
+.sync-question {
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+}
+
+.sync-options {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.sync-option {
+    flex: 1;
+    max-width: 120px;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.sync-option:hover {
+    border-color: var(--border-focus);
+}
+
+.sync-option.selected {
+    border-color: var(--text-primary);
+    background: var(--accent-muted);
+}
+
+.sync-option-label {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 4px;
+}
+
+.sync-option-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.sync-date-display {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-secondary);
 }
 
 /* Dropdown Menu */
@@ -654,30 +824,31 @@ body {
 .tasks-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
 }
 
 .empty-state {
     background: var(--bg-card);
     border: 1px dashed var(--border);
     border-radius: var(--radius-lg);
-    padding: 40px 24px;
+    padding: 32px 20px;
     text-align: center;
     color: var(--text-muted);
+    font-size: 14px;
 }
 
 .task-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 16px;
-    animation: slideIn 0.3s ease;
+    padding: 12px;
+    animation: slideIn 0.2s ease;
 }
 
 @keyframes slideIn {
     from {
         opacity: 0;
-        transform: translateY(-10px);
+        transform: translateY(-8px);
     }
     to {
         opacity: 1;
@@ -688,14 +859,13 @@ body {
 .task-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
 }
 
 .color-picker-wrapper {
     position: relative;
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
 }
 
@@ -710,28 +880,21 @@ body {
 .color-preview {
     width: 100%;
     height: 100%;
-    border-radius: 6px;
+    border-radius: 4px;
     background: #6366f1;
     pointer-events: none;
-    border: 2px solid rgba(255, 255, 255, 0.1);
 }
 
 .task-name-input {
     flex: 1;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
     font-family: inherit;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
     outline: none;
-    transition: border-color 0.2s ease;
-}
-
-.task-name-input:focus {
-    border-color: var(--border-focus);
 }
 
 .task-name-input::placeholder {
@@ -743,29 +906,37 @@ body {
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    padding: 8px;
+    padding: 4px;
     border-radius: var(--radius);
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 0.5;
+}
+
+.task-card:hover .btn-remove {
+    opacity: 1;
 }
 
 .btn-remove:hover {
-    background: rgba(239, 68, 68, 0.1);
     color: var(--danger);
 }
 
 .task-body {
     display: flex;
-    flex-direction: column;
-    gap: 16px;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
 }
 
 .time-inputs {
     display: flex;
-    align-items: flex-end;
-    gap: 12px;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
 }
 
 .time-field {
@@ -773,13 +944,7 @@ body {
 }
 
 .time-field label {
-    display: block;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    display: none;
 }
 
 .time-input {
@@ -787,12 +952,12 @@ body {
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 10px 12px;
+    padding: 6px 8px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-size: 12px;
     color: var(--text-primary);
     outline: none;
-    transition: border-color 0.2s ease;
+    transition: border-color 0.15s ease;
 }
 
 .time-input:focus {
@@ -801,8 +966,7 @@ body {
 
 .time-separator {
     color: var(--text-muted);
-    font-size: 14px;
-    padding-bottom: 12px;
+    font-size: 12px;
 }
 
 

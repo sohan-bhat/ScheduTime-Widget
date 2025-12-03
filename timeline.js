@@ -60,6 +60,49 @@ function parseCustomDateRanges(days) {
     return ranges.length > 0 ? ranges : null;
 }
 
+// A/B Day calculation
+function countWeekdaysBetween(startDate, endDate) {
+    let count = 0;
+    const current = new Date(startDate);
+    current.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+
+    while (current < end) {
+        current.setDate(current.getDate() + 1);
+        const day = current.getDay();
+        if (day !== 0 && day !== 6) count++;
+    }
+    return count;
+}
+
+function parseABDay(days) {
+    // Format: aday_20251201_B or bday_20251201_A
+    // Returns { scheduleType: 'aday'|'bday', refDate: Date, refIsADay: boolean }
+    const match = days.match(/^(aday|bday)_(\d{8})_([AB])$/);
+    if (!match) return null;
+
+    const [, scheduleType, dateStr, refDay] = match;
+    const y = parseInt(dateStr.slice(0, 4));
+    const m = parseInt(dateStr.slice(4, 6)) - 1;
+    const d = parseInt(dateStr.slice(6, 8));
+
+    return {
+        scheduleType,
+        refDate: new Date(y, m, d),
+        refIsADay: refDay === 'A'
+    };
+}
+
+function isTodayADay(refDate, refIsADay) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    refDate.setHours(0, 0, 0, 0);
+
+    const weekdaysPassed = countWeekdaysBetween(refDate, today);
+    return refIsADay ? (weekdaysPassed % 2 === 0) : (weekdaysPassed % 2 === 1);
+}
+
 function filterScheduleForToday(fullSchedule) {
     const now = new Date();
     const todayDay = now.getDay();
@@ -71,6 +114,23 @@ function filterScheduleForToday(fullSchedule) {
         if (task.days === 'weekends' && isWeekend) return true;
         if (task.days === 'weekdays' && !isWeekend) return true;
 
+        // A/B Day handling
+        if (task.days && (task.days.startsWith('aday') || task.days.startsWith('bday'))) {
+            // Skip A/B day tasks on weekends
+            if (isWeekend) return false;
+
+            const abInfo = parseABDay(task.days);
+            if (abInfo) {
+                const todayIsADay = isTodayADay(abInfo.refDate, abInfo.refIsADay);
+                if (abInfo.scheduleType === 'aday') {
+                    return todayIsADay;
+                } else {
+                    return !todayIsADay;
+                }
+            }
+        }
+
+        // Custom date ranges
         if (task.days && task.days.startsWith('c')) {
             const ranges = parseCustomDateRanges(task.days);
             if (ranges) {
@@ -188,6 +248,112 @@ function renderSecondsTicker() {
     lastSecond = currentSecond;
 }
 
+function calculateOverlaps(tasks) {
+    // Convert tasks to time ranges with minutes
+    const ranges = tasks.map((task, index) => ({
+        index,
+        start: timeToMinutes(task.start),
+        end: timeToMinutes(task.end),
+        task: task.task,
+        color: task.color
+    }));
+
+    // Sort by start time, then by end time
+    ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+
+    // Assign rows using a greedy interval scheduling approach
+    const result = ranges.map(r => ({ ...r, row: -1, totalRows: 1 }));
+    const rows = []; // Each row tracks end time of last task in that row
+
+    for (let i = 0; i < ranges.length; i++) {
+        const current = ranges[i];
+
+        // Find the first row where this task doesn't overlap
+        let assignedRow = -1;
+        for (let r = 0; r < rows.length; r++) {
+            if (rows[r] <= current.start) {
+                assignedRow = r;
+                rows[r] = current.end;
+                break;
+            }
+        }
+
+        // If no existing row works, create a new one
+        if (assignedRow === -1) {
+            assignedRow = rows.length;
+            rows.push(current.end);
+        }
+
+        result[i].row = assignedRow;
+    }
+
+    // Now calculate totalRows for each task based on overlapping tasks
+    for (let i = 0; i < result.length; i++) {
+        const current = result[i];
+        let maxOverlapRows = 1;
+
+        for (let j = 0; j < result.length; j++) {
+            if (i === j) continue;
+            const other = result[j];
+            // Check if they overlap
+            if (current.start < other.end && other.start < current.end) {
+                maxOverlapRows = Math.max(maxOverlapRows, other.row + 1, current.row + 1);
+            }
+        }
+
+        result[i].totalRows = maxOverlapRows;
+    }
+
+    // Re-map to original order (by index)
+    const finalResult = [];
+    for (const r of result) {
+        finalResult[r.index] = r;
+    }
+
+    return finalResult.filter(r => r !== undefined);
+}
+
+function findGaps(tasks, dayStart, dayEnd) {
+    if (tasks.length === 0) {
+        return [{ start: dayStart, end: dayEnd }];
+    }
+
+    const gaps = [];
+    const events = [];
+
+    for (const task of tasks) {
+        const start = timeToMinutes(task.start);
+        const end = timeToMinutes(task.end);
+        events.push({ time: start, type: 'start' });
+        events.push({ time: end, type: 'end' });
+    }
+
+    events.sort((a, b) => a.time - b.time || (a.type === 'end' ? -1 : 1));
+
+    let activeCount = 0;
+    let lastTime = dayStart;
+
+    for (const event of events) {
+        if (activeCount === 0 && event.time > lastTime) {
+            gaps.push({ start: lastTime, end: event.time });
+        }
+
+        if (event.type === 'start') {
+            activeCount++;
+        } else {
+            activeCount--;
+        }
+
+        lastTime = event.time;
+    }
+
+    if (lastTime < dayEnd) {
+        gaps.push({ start: lastTime, end: dayEnd });
+    }
+
+    return gaps;
+}
+
 function buildTimeline() {
     const viewport = document.querySelector('.timeline-viewport');
     const viewportWidth = viewport.offsetWidth;
@@ -203,42 +369,54 @@ function buildTimeline() {
 
     timeline.style.width = totalWidth + 'px';
 
-    let cursor = dayStart;
+    // Calculate overlaps
+    const tasksWithOverlaps = calculateOverlaps(schedule);
 
-    for (const block of schedule) {
-        const blockStart = timeToMinutes(block.start);
-        const blockEnd = timeToMinutes(block.end);
+    // Find gaps (where nothing is scheduled)
+    const gaps = findGaps(schedule, dayStart, dayEnd);
 
-        if (blockStart > cursor) {
-            const gapLeft = cursor * pixelsPerMinute;
-            const gapWidth = (blockStart - cursor) * pixelsPerMinute;
-            const gap = document.createElement('div');
-            gap.className = 'block gap-block inactive';
-            gap.style.left = gapLeft + 'px';
-            gap.style.width = gapWidth + 'px';
-            gap.dataset.start = cursor;
-            gap.dataset.end = blockStart;
-            gap.dataset.task = 'Nothing scheduled';
+    // Render gaps first
+    for (const gap of gaps) {
+        const gapLeft = gap.start * pixelsPerMinute;
+        const gapWidth = (gap.end - gap.start) * pixelsPerMinute;
+        const gapDiv = document.createElement('div');
+        gapDiv.className = 'block gap-block inactive';
+        gapDiv.style.left = gapLeft + 'px';
+        gapDiv.style.width = gapWidth + 'px';
+        gapDiv.dataset.start = gap.start;
+        gapDiv.dataset.end = gap.end;
+        gapDiv.dataset.task = 'Nothing scheduled';
 
-            const label = document.createElement('span');
-            label.className = 'block-label';
-            label.textContent = 'Nothing scheduled';
-            gap.appendChild(label);
+        const label = document.createElement('span');
+        label.className = 'block-label';
+        label.textContent = 'Nothing scheduled';
+        gapDiv.appendChild(label);
 
-            timeline.appendChild(gap);
-        }
+        timeline.appendChild(gapDiv);
+    }
 
-        const blockLeft = blockStart * pixelsPerMinute;
-        const width = (blockEnd - blockStart) * pixelsPerMinute;
+    // Render task blocks
+    for (const block of tasksWithOverlaps) {
+        const blockLeft = block.start * pixelsPerMinute;
+        const width = (block.end - block.start) * pixelsPerMinute;
         const div = document.createElement('div');
 
         div.className = 'block inactive';
         div.style.left = blockLeft + 'px';
         div.style.width = width + 'px';
         div.style.background = block.color;
-        div.dataset.start = blockStart;
-        div.dataset.end = blockEnd;
+        div.dataset.start = block.start;
+        div.dataset.end = block.end;
         div.dataset.task = block.task;
+        div.dataset.row = block.row;
+        div.dataset.totalRows = block.totalRows;
+
+        // Apply overlap styling
+        if (block.totalRows > 1) {
+            div.classList.add('overlapping');
+            div.dataset.overlapRow = block.row;
+            div.dataset.overlapTotal = block.totalRows;
+        }
 
         const label = document.createElement('span');
         label.className = 'block-label';
@@ -246,26 +424,6 @@ function buildTimeline() {
         div.appendChild(label);
 
         timeline.appendChild(div);
-        cursor = blockEnd;
-    }
-
-    if (cursor < dayEnd) {
-        const gapLeft = cursor * pixelsPerMinute;
-        const gapWidth = (dayEnd - cursor) * pixelsPerMinute;
-        const gap = document.createElement('div');
-        gap.className = 'block gap-block inactive';
-        gap.style.left = gapLeft + 'px';
-        gap.style.width = gapWidth + 'px';
-        gap.dataset.start = cursor;
-        gap.dataset.end = dayEnd;
-        gap.dataset.task = 'Nothing scheduled';
-
-        const label = document.createElement('span');
-        label.className = 'block-label';
-        label.textContent = 'Nothing scheduled';
-        gap.appendChild(label);
-
-        timeline.appendChild(gap);
     }
 
     timelineBuilt = true;
@@ -367,6 +525,20 @@ function render() {
         if (isPast) {
             block.classList.add('past');
         }
+
+        // Apply overlap positioning
+        if (block.classList.contains('overlapping')) {
+            const row = parseInt(block.dataset.overlapRow) || 0;
+            const totalRows = parseInt(block.dataset.overlapTotal) || 1;
+            const gap = 2; // gap between overlapping blocks in px
+            const baseHeight = isActive ? 60 : 28;
+            const blockHeight = (baseHeight - (gap * (totalRows - 1))) / totalRows;
+            const topOffset = row * (blockHeight + gap);
+
+            block.style.setProperty('--overlap-height', blockHeight + 'px');
+            block.style.setProperty('--overlap-offset', topOffset + 'px');
+            block.style.setProperty('--overlap-total', totalRows);
+        }
     });
 
     const labels = document.getElementById('timeLabels');
@@ -408,3 +580,15 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Back button functionality
+document.getElementById('backBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    const params = new URLSearchParams(window.location.search);
+    const scheduleParam = params.get('schedule');
+    if (scheduleParam) {
+        window.location.href = `index.html?schedule=${encodeURIComponent(scheduleParam)}`;
+    } else {
+        window.location.href = 'index.html';
+    }
+});
